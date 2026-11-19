@@ -1,0 +1,286 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { friendlyApiError } from "@/lib/api-error";
+import { ProductThumbnail } from "@/components/product-thumbnail";
+import { useMarketplaceConfig } from "@/components/marketplace-rules-card";
+import type { CartRead, CartSectionRead, CartShop } from "@/lib/types";
+
+/** The Shop cart.
+ *
+ *  One cart split into a section per shop, since shops have incompatible
+ *  rules (address and shipping on Marketplaces, instant cashback only on the
+ *  internal catalog). The top total is the sum; each section is paid
+ *  separately.
+ *
+ *  No prices are computed here: every operation returns the cart as
+ *  recalculated by the server, and this component renders it. */
+
+const CART_QUERY_KEY = ["carts", "mine"];
+
+function euro(cents: number): string {
+  return (cents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+}
+
+async function fetchCart(): Promise<CartRead> {
+  const res = await fetch("/api/proxy/carts/mine");
+  if (!res.ok) throw new Error(await friendlyApiError(res));
+  return res.json();
+}
+
+export function useCart(enabled = true) {
+  return useQuery({ queryKey: CART_QUERY_KEY, queryFn: fetchCart, enabled });
+}
+
+/** Cart operations. Each returns the whole cart. */
+export function useCartActions() {
+  const queryClient = useQueryClient();
+  // Write the returned cart straight to the cache: no refetch, and totals
+  // always come from the server.
+  const onSuccess = (cart: CartRead) => queryClient.setQueryData(CART_QUERY_KEY, cart);
+
+  async function send(path: string, init: RequestInit): Promise<CartRead> {
+    const res = await fetch(path, init);
+    if (!res.ok) throw new Error(await friendlyApiError(res));
+    return res.json();
+  }
+  const json = (body: unknown, method: string): RequestInit => ({
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const add = useMutation({
+    mutationFn: ({ shop, variantId, quantity }: { shop: CartShop; variantId: string; quantity: number }) =>
+      send(`/api/proxy/carts/mine/${shop}/items`, json({ variant_id: variantId, quantity }, "POST")),
+    onSuccess,
+  });
+  const setQuantity = useMutation({
+    mutationFn: ({ shop, itemId, quantity }: { shop: CartShop; itemId: string; quantity: number }) =>
+      send(`/api/proxy/carts/mine/${shop}/items/${itemId}`, json({ quantity }, "PATCH")),
+    onSuccess,
+  });
+  const remove = useMutation({
+    mutationFn: ({ shop, itemId }: { shop: CartShop; itemId: string }) =>
+      send(`/api/proxy/carts/mine/${shop}/items/${itemId}`, { method: "DELETE" }),
+    onSuccess,
+  });
+  const clear = useMutation({
+    mutationFn: ({ shop }: { shop: CartShop }) => send(`/api/proxy/carts/mine/${shop}`, { method: "DELETE" }),
+    onSuccess,
+  });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });
+  return { add, setQuantity, remove, clear, invalidate };
+}
+
+/** Header cart icon with item count. Stays visible when empty so it is
+ *  always findable. */
+export function ShopCartButton({ onOpen }: { onOpen: () => void }) {
+  const { data: cart } = useCart();
+  const count = cart?.item_count ?? 0;
+  return (
+    <button
+      onClick={onOpen}
+      aria-label={count > 0 ? `Carrello, ${count} articoli` : "Carrello, vuoto"}
+      className="relative flex items-center gap-2 px-2.5 py-2 rounded-xl border border-white/10 light:border-surface-200 bg-white/5 light:bg-surface-900/5 hover:bg-white/10 light:hover:bg-surface-900/10 transition cursor-pointer"
+    >
+      <svg className="w-5 h-5 text-surface-300 light:text-surface-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 3h2l.4 2M7 13h10l3-8H5.4M7 13L5.4 5M7 13l-2 5h13" />
+        <circle cx="9" cy="20" r="1.5" />
+        <circle cx="17" cy="20" r="1.5" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+      {/* Total hidden below 640px, where the header has no room. */}
+      {cart && cart.total_cents > 0 && (
+        <span className="hidden sm:inline text-xs font-semibold text-white light:text-surface-900 tabular-nums">
+          {euro(cart.total_cents)}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function QuantityStepper({
+  value, disabled, onChange,
+}: { value: number; disabled: boolean; onChange: (next: number) => void }) {
+  return (
+    <div className="flex items-center rounded-lg border border-white/10 light:border-surface-200 overflow-hidden">
+      <button
+        onClick={() => onChange(value - 1)}
+        disabled={disabled}
+        aria-label="Diminuisci"
+        className="px-2 py-1 text-sm text-surface-300 light:text-surface-600 hover:bg-white/10 light:hover:bg-surface-900/10 disabled:opacity-40 cursor-pointer"
+      >
+        −
+      </button>
+      <span className="px-2.5 text-xs font-semibold text-white light:text-surface-900 tabular-nums">{value}</span>
+      <button
+        onClick={() => onChange(value + 1)}
+        disabled={disabled}
+        aria-label="Aumenta"
+        className="px-2 py-1 text-sm text-surface-300 light:text-surface-600 hover:bg-white/10 light:hover:bg-surface-900/10 disabled:opacity-40 cursor-pointer"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+function CartSection({
+  section, label, onCheckout,
+}: { section: CartSectionRead; label: string; onCheckout: (shop: CartShop) => void }) {
+  const { setQuantity, remove, clear } = useCartActions();
+  const busy = setQuantity.isPending || remove.isPending || clear.isPending;
+
+  return (
+    <div className="rounded-xl border border-white/10 light:border-surface-200 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-white/5 light:bg-surface-900/5">
+        <p className="text-xs font-bold text-white light:text-surface-900">{label}</p>
+        <button
+          onClick={() => clear.mutate({ shop: section.shop })}
+          disabled={busy}
+          className="text-[11px] text-surface-500 hover:text-danger-400 disabled:opacity-40 cursor-pointer"
+        >
+          Svuota
+        </button>
+      </div>
+
+      <div className="divide-y divide-white/5 light:divide-surface-200">
+        {section.items.map((line) => (
+          <div key={line.cart_item_id} className="flex gap-3 p-3">
+            <ProductThumbnail imageUrl={line.image_url} alt={line.product_name} className="w-14 h-14 rounded-lg shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <p className={`text-xs font-semibold truncate ${line.available ? "text-white light:text-surface-900" : "text-surface-500 line-through"}`}>
+                {line.product_name}
+              </p>
+              {line.variant_label && <p className="text-[11px] text-surface-500 truncate">{line.variant_label}</p>}
+              {!line.available && (
+                <p className="text-[11px] text-danger-400">{line.unavailable_reason ?? "Non più disponibile."}</p>
+              )}
+              <div className="flex items-center gap-2 pt-0.5">
+                <QuantityStepper
+                  value={line.quantity}
+                  disabled={busy || !line.available}
+                  onChange={(next) =>
+                    setQuantity.mutate({ shop: section.shop, itemId: line.cart_item_id, quantity: next })
+                  }
+                />
+                <button
+                  onClick={() => remove.mutate({ shop: section.shop, itemId: line.cart_item_id })}
+                  disabled={busy}
+                  className="text-[11px] text-surface-500 hover:text-danger-400 disabled:opacity-40 cursor-pointer"
+                >
+                  Rimuovi
+                </button>
+              </div>
+            </div>
+            <p className="text-xs font-bold text-white light:text-surface-900 tabular-nums shrink-0">
+              {line.available ? euro(line.line_total_cents) : "—"}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="p-3 space-y-1.5 bg-gradient-to-br from-brand-600/10 to-accent-500/5 border-t border-brand-500/20">
+        <div className="flex justify-between text-[11px] text-surface-400 light:text-surface-500">
+          <span>Articoli</span>
+          <span className="tabular-nums">{euro(section.items_cents ?? 0)}</span>
+        </div>
+        <div className="flex justify-between text-[11px] text-surface-400 light:text-surface-500">
+          <span>Spedizione</span>
+          <span className="tabular-nums">
+            {section.shipping_included || !section.shipping_cents ? "Inclusa" : euro(section.shipping_cents)}
+          </span>
+        </div>
+        <div className="flex justify-between items-center pt-1 border-t border-white/10 light:border-surface-300">
+          <span className="text-xs font-bold text-white light:text-surface-900">Totale</span>
+          <span className="text-base font-extrabold text-brand-400 tabular-nums">{euro(section.amount_cents ?? 0)}</span>
+        </div>
+        {section.purchasable ? (
+          <button
+            onClick={() => onCheckout(section.shop)}
+            className="w-full mt-1 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white transition cursor-pointer"
+          >
+            Vai al checkout
+          </button>
+        ) : (
+          <p className="mt-1 text-[11px] text-danger-400">
+            Togli gli articoli non più disponibili per poter procedere.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Cart drawer, sliding in from the right over the Shop grid. */
+export function ShopCartPanel({
+  open, onClose, onCheckout,
+}: { open: boolean; onClose: () => void; onCheckout: (shop: CartShop) => void }) {
+  const { data: cart, isLoading, error } = useCart(open);
+  const { data: config } = useMarketplaceConfig();
+  const labels: Record<CartShop, string> = {
+    aliexpress: config?.labels?.aliexpress ?? "Marketplace 3",
+    cj: config?.labels?.cj ?? "Marketplace 1",
+    shopify: config?.labels?.shopify ?? "Marketplace 2",
+    sosnet_market: config?.labels?.sosnet_market ?? "Fai la Spesa con Sosnet",
+    catalog: config?.sections?.partner?.label ?? "Prodotti Partner",
+  };
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
+      <div className="relative w-full max-w-md h-full overflow-y-auto bg-surface-950 light:bg-white border-l border-white/10 light:border-surface-200 p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-white light:text-surface-900">Il tuo carrello</h2>
+          <button onClick={onClose} aria-label="Chiudi" className="text-surface-500 hover:text-white light:hover:text-surface-900 cursor-pointer">
+            ✕
+          </button>
+        </div>
+
+        {isLoading && <p className="text-xs text-surface-500">Caricamento…</p>}
+        {error && <p className="text-xs text-danger-400">{(error as Error).message}</p>}
+
+        {cart && cart.sections.length === 0 && (
+          <div className="py-16 text-center space-y-2">
+            <p className="text-sm text-surface-400 light:text-surface-500">Il carrello è vuoto.</p>
+            <p className="text-xs text-surface-500">Aggiungi un prodotto dallo Shop per iniziare.</p>
+          </div>
+        )}
+
+        {cart && cart.sections.length > 0 && (
+          <>
+            {/* Several sections mean several orders and shipments; say so upfront. */}
+            {cart.sections.length > 1 && (
+              <p className="text-[11px] text-surface-500 leading-relaxed">
+                Gli articoli arrivano da negozi diversi: si pagano separatamente, un ordine per negozio,
+                ciascuno con la sua spedizione.
+              </p>
+            )}
+            <div className="space-y-3">
+              {cart.sections.map((section) => (
+                <CartSection
+                  key={section.cart_id}
+                  section={section}
+                  label={labels[section.shop]}
+                  onCheckout={onCheckout}
+                />
+              ))}
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-white/10 light:border-surface-200">
+              <span className="text-xs text-surface-400 light:text-surface-500">Totale carrello</span>
+              <span className="text-lg font-extrabold text-white light:text-surface-900 tabular-nums">
+                {euro(cart.total_cents)}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,1761 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   SOSNET visual system
+   ============================================================================
+
+   Components never name raw Tailwind colors. They use roles (brand, accent,
+   surface, success, warn, danger, info) and the role decides the hue, so
+   rebranding is a change to this file only.
+
+   Scales live in `@theme`, so Tailwind generates every utility
+   (`bg-brand-600`, `border-accent-500/30`, ...) including opacity modifiers.
+
+   Three layers, from abstract to concrete:
+
+     1. @theme        color scales (which hue "brand" is)
+     2. :root         light/dark semantic tokens (card surface, border
+                      strength, ...)
+     3. utilities     composite classes (.panel, .field, .rise, ...)
+
+   Components use layers 1 and 3 only.
+   ========================================================================= */
+
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* --- brand: the SOSNET logo red. Unlike Tailwind's `red`, the light
+         steps stay saturated instead of turning pink, so white text on
+         solid red keeps its contrast. ------------------------------------ */
+  --color-brand-50:  #f1f5ff;
+  --color-brand-100: #dfe9ff;
+  --color-brand-200: #c3d6ff;
+  --color-brand-300: #96b8ff;
+  --color-brand-400: #5591ff;
+  --color-brand-500: #1e6cf8;
+  --color-brand-600: #0a54e0;  /* logo hue */
+  --color-brand-700: #0745b8;
+  --color-brand-800: #083690;
+  --color-brand-900: #0a2d6d;
+  --color-brand-950: #03163c;
+
+  /* --- accent: the magenta ending every brand gradient. It sits within
+         40 degrees of the red, so gradients cross no foreign hues, and it
+         is deliberately not orange. ------------------------------------- */
+  --color-accent-50:  #f0fdff;
+  --color-accent-100: #dcfbff;
+  --color-accent-200: #b8f6ff;
+  --color-accent-300: #85eeff;
+  --color-accent-400: #47e2ff;
+  --color-accent-500: #12d1f5;
+  --color-accent-600: #04b3d4;
+  --color-accent-700: #0691ae;
+  --color-accent-800: #08728b;
+  --color-accent-900: #0a5c6f;
+  --color-accent-950: #043341;
+
+  /* --- surface: crimson-tinted neutrals. The app always runs on a red
+         scene, so even the "grey" steps lean red. ------------------------ */
+  --color-surface-50:  #f5f9ff;
+  --color-surface-100: #e8f1ff;
+  --color-surface-200: #d3e2fb;
+  --color-surface-300: #b4ccf2;
+  --color-surface-400: #95b2dc;
+  --color-surface-500: #7390b8;
+  --color-surface-600: #415e83;
+  --color-surface-700: #1f3c5c;
+  --color-surface-800: #0f263f;
+  --color-surface-900: #081a2b;
+  --color-surface-950: #040f1a;
+
+  /* --- status colors stay conventional (a green warning or a blue error
+         would confuse more than consistency helps).
+
+         Red brand and red danger are told apart by treatment, not hue: a
+         primary action is always a solid red->magenta gradient, an error is
+         always a flat slab with icon and border. Never make a solid
+         `bg-danger-600` button. ------------------------------------------ */
+  --color-success-50:  #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-200: #a7f3d0;
+  --color-success-300: #6ee7b7;
+  --color-success-400: #34d399;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065f46;
+  --color-success-900: #064e3b;
+  --color-success-950: #022c22;
+
+  --color-warn-50:  #fffbeb;
+  --color-warn-100: #fef3c7;
+  --color-warn-200: #fde68a;
+  --color-warn-300: #fcd34d;
+  --color-warn-400: #fbbf24;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #d97706;
+  --color-warn-700: #b45309;
+  --color-warn-800: #92400e;
+  --color-warn-900: #78350f;
+  --color-warn-950: #451a03;
+
+  --color-danger-50:  #fff1f2;
+  --color-danger-100: #ffe4e6;
+  --color-danger-200: #fecdd3;
+  --color-danger-300: #fda4af;
+  --color-danger-400: #fb7185;
+  --color-danger-500: #f43f5e;
+  --color-danger-600: #e11d48;
+  --color-danger-700: #be123c;
+  --color-danger-800: #9f1239;
+  --color-danger-900: #881337;
+  --color-danger-950: #4c0519;
+
+  --color-info-50:  #f0f9ff;
+  --color-info-100: #e0f2fe;
+  --color-info-200: #bae6fd;
+  --color-info-300: #7dd3fc;
+  --color-info-400: #38bdf8;
+  --color-info-500: #0ea5e9;
+  --color-info-600: #0284c7;
+  --color-info-700: #0369a1;
+  --color-info-800: #075985;
+  --color-info-900: #0c4a6e;
+  --color-info-950: #082f49;
+
+  /* --- easing curves: one family, for consistent motion ---------------- */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   2. Semantic theme tokens
+   ------------------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+
+  --bg-base: #030f1d;
+  --bg-elevated: rgba(5, 24, 44, 0.9);
+  --bg-sunken: rgba(2, 13, 22, 0.55);
+  --fg-base: #f5f9ff;
+  --fg-muted: #aec6e8;
+  --fg-subtle: #88a2c6;
+
+  --line-soft: rgba(200, 222, 255, 0.11);
+  --line-strong: rgba(200, 222, 255, 0.24);
+
+  --field-bg: rgba(2, 13, 22, 0.55);
+  --field-border: rgba(200, 222, 255, 0.2);
+  --field-fg: #f5f9ff;
+
+  --brand: #4488ff;
+  --brand-strong: #0a54e0;
+  --brand-soft: rgba(68, 136, 255, 0.2);
+  --brand-glow: rgba(40, 119, 255, 0.42);
+  --accent: #47e2ff;
+  --accent-soft: rgba(71, 226, 255, 0.18);
+
+  --aura-1: rgba(45, 124, 255, 0.42);
+  --aura-2: rgba(71, 226, 255, 0.22);
+  --aura-3: rgba(8, 63, 160, 0.5);
+
+  --shadow-panel: 0 30px 70px -34px rgba(0, 9, 20, 0.95);
+  --shadow-lift: 0 34px 80px -30px var(--brand-glow);
+
+  --rail-track: rgba(2, 13, 22, 0.5);
+  --rail-thumb: rgba(170, 202, 255, 0.3);
+}
+
+/* There is no light scene: the app is always red. `light:` variants in
+   components stay inert because data-theme is always "dark" (lib/theme.tsx). */
+
+/* ---------------------------------------------------------------------------
+   3. Page background
+   ------------------------------------------------------------------------ */
+
+body {
+  background-color: var(--bg-base);
+  color: var(--fg-base);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  transition: background-color 0.35s var(--ease-out-soft), color 0.35s var(--ease-out-soft);
+}
+
+/* Background auroras on a fixed pseudo-element, not on `body`: iOS ignores
+   `background-attachment: fixed`, but honors a `position: fixed` layer. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -3;
+  pointer-events: none;
+  background:
+    radial-gradient(55rem 38rem at 12% -8%, var(--aura-1) 0%, transparent 62%),
+    radial-gradient(48rem 36rem at 96% 4%, var(--aura-2) 0%, transparent 58%),
+    radial-gradient(80rem 50rem at 50% 118%, var(--aura-3) 0%, transparent 64%),
+    radial-gradient(140% 110% at 50% -20%, #0c4ec0 0%, #07398c 26%, #052756 50%, #03162c 74%, #020d17 100%);
+  animation: auraDrift 26s var(--ease-in-out-soft) infinite alternate;
+}
+
+/* Very faint grain to break up flat gradients; one inline SVG tile, no
+   network request. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: radial-gradient(circle at 1px 1px, rgba(210, 228, 255, 0.16) 1px, transparent 0);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(70rem 50rem at 50% 0%, #000 0%, transparent 75%);
+}
+
+@keyframes auraDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(0, -2.5%, 0) scale(1.06); }
+}
+
+/* ---------------------------------------------------------------------------
+   4. Composite utilities used by components
+   ------------------------------------------------------------------------ */
+
+/* Translucent surface with a gradient border and a hover lift. */
+/* No backdrop-filter and no transform here: either one makes the panel the
+   containing block of `position: fixed` descendants, and many modals are
+   rendered inside a panel. They would then be sized to the panel. */
+.panel {
+  position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-panel);
+  transition:
+    transform 0.35s var(--ease-out-soft),
+    border-color 0.35s var(--ease-out-soft),
+    box-shadow 0.35s var(--ease-out-soft);
+}
+
+/* Top-edge highlight, so the surface reads as lit glass. */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent);
+  pointer-events: none;
+}
+
+.panel-hover:hover {
+  border-color: var(--brand-soft);
+  box-shadow: var(--shadow-lift);
+}
+
+/* True gradient border (two layers + mask) for featured cards. */
+.panel-ring {
+  position: relative;
+}
+
+.panel-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--accent) 55%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.field {
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  color: var(--field-fg);
+  transition:
+    border-color 0.2s var(--ease-out-soft),
+    box-shadow 0.2s var(--ease-out-soft),
+    background-color 0.2s var(--ease-out-soft);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* Dropdown options are painted by the OS list, not the field: give every
+   select explicit colors so text never matches its background. */
+.field option,
+select option {
+  background: #030f1d;
+  color: #f5f9ff;
+}
+
+/* Gradient text for emphasized headings. */
+.text-gradient {
+  background: linear-gradient(120deg, var(--brand) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-glow-brand { text-shadow: 0 0 18px var(--brand-glow); }
+.text-glow-accent { text-shadow: 0 0 18px var(--accent-soft); }
+
+/* ---------------------------------------------------------------------------
+   5. Motion
+   ------------------------------------------------------------------------
+
+   None of these animations use `forwards`. It would keep the final
+   keyframe's non-`none` transform on the element, making it the containing
+   block for `position: fixed` descendants. `.rise` sits on <main>, the
+   ancestor of every modal, so fixed overlays would size to <main> instead
+   of the viewport.
+   ------------------------------------------------------------------------ */
+
+@keyframes sosnetFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sosnetRise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sosnetPop {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes sosnetSlideIn {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sosnetSheen {
+  0%   { background-position: -220% 0; }
+  100% { background-position: 220% 0; }
+}
+
+@keyframes sosnetPulseRing {
+  0%   { box-shadow: 0 0 0 0 var(--brand-glow); }
+  70%  { box-shadow: 0 0 0 12px rgba(30, 108, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(30, 108, 248, 0); }
+}
+
+@keyframes sosnetFloat {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+
+@keyframes sosnetDrawLine {
+  from { stroke-dashoffset: var(--line-length, 100); }
+  to   { stroke-dashoffset: 0; }
+}
+
+.animate-fade-in { animation: sosnetFade 0.45s var(--ease-out-soft); }
+.rise            { animation: sosnetRise 0.55s var(--ease-out-soft); }
+.pop             { animation: sosnetPop 0.4s var(--ease-spring); }
+.slide-in        { animation: sosnetSlideIn 0.4s var(--ease-out-soft); }
+.float-soft      { animation: sosnetFloat 3.4s var(--ease-in-out-soft) infinite alternate; }
+.pulse-ring      { animation: sosnetPulseRing 2.2s var(--ease-out-soft) infinite; }
+
+.sheen {
+  background-size: 220% 100%;
+  animation: sosnetSheen 2.6s var(--ease-in-out-soft) infinite;
+}
+
+/* Staggered entrance: the row index arrives as a CSS variable
+   (`style={{ '--i': n }}`) and becomes the delay. No JS. */
+/* `backwards`, not `both`: a fill that outlives the animation keeps a
+   transform on every child, which would trap their modals (see §10). */
+.stagger > * {
+  animation: sosnetRise 0.5s var(--ease-out-soft) backwards;
+  animation-delay: calc(var(--stagger-step, 45ms) * var(--i, 0));
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.6s var(--ease-out-soft),
+    transform 0.6s var(--ease-out-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Reduced motion turns everything off, background auroras included. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   6. Scrollbars
+   ------------------------------------------------------------------------ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rail-thumb) transparent;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--rail-track); }
+::-webkit-scrollbar-thumb {
+  background: var(--rail-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--brand); background-clip: content-box; }
+
+/* ---------------------------------------------------------------------------
+   7. Network org chart (components/network-chart.tsx)
+   ------------------------------------------------------------------------
+
+   Connectors are pure CSS, not SVG: an SVG overlay would need measuring
+   every card after render and redrawing on open, zoom or resize. These
+   lines are pseudo-elements of self-positioning containers, so they stay
+   attached, including under the `transform: scale()` used for zoom.
+
+   Classic org chart layout: a trunk down from the parent, a horizontal bar
+   over the children row, and a drop to each child. First and last children
+   cut the bar in half so it does not overhang.
+   ------------------------------------------------------------------------ */
+
+.org-canvas {
+  --org-line: var(--line-strong);
+  --org-drop: 18px;
+  transform-origin: top center;
+  transition: transform 0.28s var(--ease-out-soft);
+}
+
+.org-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Trunk: from the parent card to the children bar. */
+.org-trunk {
+  width: 2px;
+  height: var(--org-drop);
+  background: var(--org-line);
+  flex: none;
+}
+
+.org-children {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.org-child {
+  position: relative;
+  padding-top: var(--org-drop);
+  padding-inline: 10px;
+}
+
+/* Horizontal bar joining siblings. */
+.org-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--org-line);
+}
+
+.org-child:first-child::after { left: 50%; }
+.org-child:last-child::after { right: 50%; }
+.org-child:only-child::after { display: none; }
+
+/* Vertical drop to each child. */
+.org-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: var(--org-drop);
+  background: var(--org-line);
+  transform: translateX(-50%);
+}
+
+/* Branch opening: children enter from above, staggered by `--i`. */
+.org-children[data-entering="true"] > .org-child {
+  animation: sosnetRise 0.4s var(--ease-out-soft) both;
+  animation-delay: calc(35ms * var(--i, 0));
+}
+
+/* Card. The level color comes from the inline `--lvl` variable, since
+   Tailwind cannot see classes composed at runtime. */
+.org-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+  border-top: 2px solid color-mix(in srgb, var(--lvl) 70%, transparent);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  white-space: nowrap;
+  transition:
+    transform 0.25s var(--ease-out-soft),
+    border-color 0.25s var(--ease-out-soft),
+    box-shadow 0.25s var(--ease-out-soft);
+}
+
+.org-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(60% 100% at 50% 0%, color-mix(in srgb, var(--lvl) 22%, transparent), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease-out-soft);
+  pointer-events: none;
+}
+
+.org-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--lvl) 45%, transparent);
+  box-shadow: 0 22px 46px -26px color-mix(in srgb, var(--lvl) 65%, transparent);
+}
+
+.org-card:hover::before { opacity: 1; }
+
+.org-card[data-focus="true"] {
+  border-color: color-mix(in srgb, var(--lvl) 65%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lvl) 22%, transparent), var(--shadow-panel);
+}
+
+/* Descendant-count pill, which also toggles the branch. */
+.org-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--lvl);
+  background: color-mix(in srgb, var(--lvl) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lvl) 32%, transparent);
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease-out-soft), transform 0.2s var(--ease-spring);
+}
+
+.org-toggle:hover {
+  background: color-mix(in srgb, var(--lvl) 26%, transparent);
+  transform: translateY(-1px);
+}
+
+.org-toggle svg { transition: transform 0.25s var(--ease-out-soft); }
+.org-toggle[data-open="true"] svg { transform: rotate(180deg); }
+
+/* Horizontal layout (the default): the top person on the left, each branch
+   opening to the right. Same connectors, turned 90°: a stub from the parent,
+   a vertical bar along the children column, a stub into each child. */
+.org-canvas[data-orient="horizontal"] { transform-origin: left center; }
+.org-canvas[data-orient="horizontal"] .org-node { flex-direction: row; align-items: center; }
+.org-canvas[data-orient="horizontal"] .org-trunk { width: var(--org-drop); height: 2px; }
+.org-canvas[data-orient="horizontal"] .org-children { flex-direction: column; align-items: flex-start; justify-content: center; }
+.org-canvas[data-orient="horizontal"] .org-child { padding: 6px 0 6px var(--org-drop); }
+.org-canvas[data-orient="horizontal"] .org-child::after {
+  top: 0; bottom: 0; left: 0; right: auto; width: 2px; height: auto;
+}
+.org-canvas[data-orient="horizontal"] .org-child:first-child::after { top: 50%; left: 0; }
+.org-canvas[data-orient="horizontal"] .org-child:last-child::after { bottom: 50%; right: auto; }
+.org-canvas[data-orient="horizontal"] .org-child::before {
+  top: 50%; left: 0; width: var(--org-drop); height: 2px; transform: translateY(-50%);
+}
+.org-canvas[data-orient="horizontal"] .org-toggle svg { transform: rotate(-90deg); }
+.org-canvas[data-orient="horizontal"] .org-toggle[data-open="true"] svg { transform: rotate(90deg); }
+
+/* Drag surface. */
+.org-viewport { cursor: grab; }
+.org-viewport[data-panning="true"] { cursor: grabbing; }
+.org-viewport[data-panning="true"] .org-canvas { transition: none; }
+
+/* ---------------------------------------------------------------------------
+   8. Auth scene (components/auth-stage.tsx)
+   ------------------------------------------------------------------------
+
+   Screens outside the app (login, password recovery, invite, email
+   verification) ignore the light/dark theme and are always red.
+   `[data-scene="ember"]` redefines the theme tokens locally, so everything
+   inside reads red values without components knowing.
+
+   The background is four CSS-only layers (perspective floor, two drifting
+   glows, a rotating beam, a dot texture): no images, no per-frame JS.
+   ------------------------------------------------------------------------ */
+
+[data-scene="ember"] {
+  color-scheme: dark;
+
+  --bg-elevated: rgba(6, 19, 30, 0.58);
+  --fg-base: #f6f9ff;
+  --fg-muted: #b9cdf0;
+  --fg-subtle: #8dabd9;
+
+  --line-soft: rgba(255, 255, 255, 0.10);
+  --line-strong: rgba(255, 255, 255, 0.22);
+
+  --field-bg: rgba(2, 11, 18, 0.55);
+  --field-border: rgba(200, 220, 255, 0.34);
+  --field-fg: #f6f9ff;
+
+  --brand: #5591ff;
+  --brand-strong: #0a54e0;
+  --brand-soft: rgba(85, 145, 255, 0.22);
+  --brand-glow: rgba(30, 110, 255, 0.45);
+  --accent: #47e2ff;
+  --accent-soft: rgba(71, 226, 255, 0.2);
+
+  --shadow-panel: 0 40px 90px -40px rgba(0, 0, 0, 0.85);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--fg-base);
+  background:
+    radial-gradient(120% 95% at 50% -22%, #2f78ff 0%, #0b57e6 20%, #0943b0 42%, #07357d 62%, #052756 80%, #041f3a 100%);
+}
+
+/* Perspective floor: a flat grid tilted 74 degrees, sharp at any
+   resolution. It scrolls by exactly one grid step (90px) so the loop is
+   seamless. */
+.stage-floor {
+  position: absolute;
+  inset: 52% -60% -35% -60%;
+  z-index: -3;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(186, 212, 255, 0.38) 0 1px, transparent 1px 90px),
+    repeating-linear-gradient(0deg, rgba(186, 212, 255, 0.30) 0 1px, transparent 1px 90px);
+  transform: perspective(520px) rotateX(74deg);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 62%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 62%, transparent 95%);
+  animation: stageFloorRun 7s linear infinite;
+}
+
+@keyframes stageFloorRun {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 90px, 0 90px; }
+}
+
+/* Horizon line between floor and sky. */
+.stage-horizon {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 52%;
+  height: 1px;
+  z-index: -3;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(220, 233, 255, 0.75), transparent);
+  box-shadow: 0 0 44px 10px rgba(60, 129, 255, 0.45);
+}
+
+/* Drifting glows for depth. */
+.stage-orb {
+  position: absolute;
+  z-index: -3;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  animation: stageDrift 16s var(--ease-in-out-soft) infinite alternate;
+}
+
+@keyframes stageDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(4%, -7%, 0) scale(1.18); }
+}
+
+/* Rotating beam: a spinning `conic-gradient`, masked to a circle to hide
+   the rectangle's corners. */
+.stage-beam {
+  position: absolute;
+  left: 50%;
+  top: -35%;
+  width: 150vmax;
+  height: 150vmax;
+  z-index: -3;
+  pointer-events: none;
+  translate: -50% 0;
+  opacity: 0.20;
+  background: conic-gradient(from 0deg,
+    transparent 0deg, rgba(220, 235, 255, 0.55) 12deg, transparent 26deg,
+    transparent 180deg, rgba(140, 227, 255, 0.40) 194deg, transparent 210deg);
+  mask-image: radial-gradient(closest-side, #000 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(closest-side, #000 0%, transparent 72%);
+  animation: stageSpin 44s linear infinite;
+}
+
+@keyframes stageSpin {
+  to { rotate: 360deg; }
+}
+
+/* Dot texture. */
+.stage-grain {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  opacity: 0.30;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.55) 1px, transparent 0);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(70% 60% at 50% 30%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 30%, #000 0%, transparent 78%);
+}
+
+/* --- Console: the box holding the form ------------------------------- */
+
+.console {
+  position: relative;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(8, 45, 88, 0.68) 0%, rgba(3, 20, 34, 0.84) 100%);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow:
+    0 60px 120px -40px rgba(0, 24, 60, 0.85),
+    0 0 0 1px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Glowing ring: a true gradient border. */
+.console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(150deg,
+    rgba(210, 226, 255, 0.85) 0%, rgba(71, 226, 255, 0.45) 38%,
+    rgba(255, 255, 255, 0.06) 70%, rgba(90, 146, 255, 0.55) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Occasional light sweep across the console. */
+.console::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.10) 47%, transparent 56%);
+  background-size: 260% 100%;
+  animation: stageSweep 7.5s var(--ease-in-out-soft) infinite;
+}
+
+@keyframes stageSweep {
+  0%, 62% { background-position: 170% 0; }
+  100%    { background-position: -70% 0; }
+}
+
+/* --- Large fields and buttons ---------------------------------------- */
+
+/* Scene fields are twice the app's height: short forms, big targets. */
+.field-xl {
+  width: 100%;
+  height: 60px;
+  padding-inline: 20px;
+  border-radius: 18px;
+  font-size: 16px;   /* below 16px iOS zooms the page on focus */
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
+  color: var(--field-fg);
+  transition:
+    border-color 0.25s var(--ease-out-soft),
+    box-shadow 0.25s var(--ease-out-soft),
+    background-color 0.25s var(--ease-out-soft);
+}
+
+.field-xl::placeholder { color: rgba(220, 233, 255, 0.42); }
+
+.field-xl:focus {
+  outline: none;
+  background: rgba(3, 16, 28, 0.72);
+  border-color: rgba(220, 233, 255, 0.75);
+  box-shadow: 0 0 0 4px rgba(85, 145, 255, 0.22);
+}
+
+/* Primary button: tall, heavy text, and it presses down instead of
+   changing color. */
+.btn-xl {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  height: 64px;
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(100deg, #216eff 0%, #1eb1ff 52%, #47e2ff 100%);
+  background-size: 180% 100%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 20px 45px -18px rgba(33, 110, 255, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition:
+    transform 0.2s var(--ease-spring),
+    background-position 0.6s var(--ease-out-soft),
+    box-shadow 0.3s var(--ease-out-soft);
+}
+
+.btn-xl:hover:not(:disabled) {
+  background-position: 100% 0;
+  box-shadow:
+    0 26px 60px -18px rgba(33, 110, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.btn-xl:active:not(:disabled) { transform: scale(0.982); }
+
+.btn-xl:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+  opacity: 0.6;
+}
+
+/* Hover sheen across the button. */
+.btn-xl > .btn-sheen {
+  position: absolute;
+  inset: 0;
+  translate: -100% 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  transition: translate 0.75s var(--ease-out-soft);
+  pointer-events: none;
+}
+
+.btn-xl:hover:not(:disabled) > .btn-sheen { translate: 100% 0; }
+
+/* Secondary button: same size, no weight. */
+.btn-ghost-xl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 54px;
+  border-radius: 18px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6efff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition:
+    background-color 0.25s var(--ease-out-soft),
+    border-color 0.25s var(--ease-out-soft),
+    transform 0.2s var(--ease-spring);
+}
+
+.btn-ghost-xl:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.34);
+  transform: translateY(-1px);
+}
+
+/* Status pill at the top of the console (pulsing dot). */
+.stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d9e7ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+.stage-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  animation: stageBeacon 2.4s var(--ease-out-soft) infinite;
+}
+
+@keyframes stageBeacon {
+  0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+  70%  { box-shadow: 0 0 0 9px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+
+/* Shorter variant for long forms such as invite registration. */
+.field-lg {
+  height: 52px;
+  padding-inline: 18px;
+  border-radius: 16px;
+  font-size: 15px;
+}
+
+/* Dropdown options do not inherit the field background; without this the
+   list would be white text on white. */
+.field-xl option,
+.field-lg option {
+  background: #040f1a;
+  color: #f6f9ff;
+}
+
+/* Scene checkbox, large enough for a finger. */
+.stage-check {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 7px;
+  accent-color: #216eff;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   9. App scene (components/app-frame.tsx)
+   ------------------------------------------------------------------------
+
+   Every signed-in area runs on the same red scene: a perspective floor that
+   scrolls toward the viewer, two drifting glows, a floating command deck at
+   the top, a hero with the rotating network globe, and content below.
+   ------------------------------------------------------------------------ */
+
+.scene-floor {
+  position: fixed;
+  inset: 58% -60% -40% -60%;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(170, 204, 255, 0.22) 0 1px, transparent 1px 110px),
+    repeating-linear-gradient(0deg, rgba(170, 204, 255, 0.18) 0 1px, transparent 1px 110px);
+  transform: perspective(600px) rotateX(76deg);
+  transform-origin: 50% 0;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 60%, transparent 96%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 25%, #000 60%, transparent 96%);
+  animation: sceneFloorRun 9s linear infinite;
+}
+
+@keyframes sceneFloorRun {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 110px, 0 110px; }
+}
+
+.scene-orb {
+  position: fixed;
+  z-index: -2;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: stageDrift 18s var(--ease-in-out-soft) infinite alternate;
+}
+
+/* --- Command deck: floating glass bar -------------------------------- */
+
+.deck {
+  position: sticky;
+  top: 12px;
+  z-index: 40;
+  margin: 12px 12px 0;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(10, 48, 92, 0.78) 0%, rgba(3, 21, 40, 0.86) 100%);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow:
+    0 26px 60px -30px rgba(0, 5, 10, 0.95),
+    0 0 0 1px rgba(190, 217, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@media (min-width: 1024px) {
+  .deck { margin: 16px 24px 0; }
+}
+
+.deck-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: #c3d7f4;
+  cursor: pointer;
+  transition: color 0.25s var(--ease-out-soft), background-color 0.25s var(--ease-out-soft);
+}
+
+.deck-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+
+.deck-tab[data-active="true"] {
+  color: #fff;
+  background: linear-gradient(100deg, #216eff 0%, #1eb1ff 55%, #47e2ff 100%);
+  box-shadow: 0 12px 28px -12px rgba(33, 110, 255, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  animation: sosnetPop 0.35s var(--ease-spring);
+}
+
+.deck-tab svg { width: 16px; height: 16px; }
+
+.deck-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffd24a;
+  box-shadow: 0 0 10px #ffd24a;
+}
+
+/* --- Mega panel: section tiles of a group, folding down in 3D -------- */
+
+.mega {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 10px);
+  border-radius: 24px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgb(8, 41, 78) 0%, rgb(3, 19, 34) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 50px 100px -40px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(190, 217, 255, 0.16);
+  transform-origin: 50% 0;
+  animation: megaFold 0.42s var(--ease-out-soft);
+}
+
+@media (min-width: 1280px) {
+  .mega { display: block; }
+}
+
+@keyframes megaFold {
+  from { opacity: 0; transform: perspective(1200px) rotateX(-18deg) translateY(-8px); }
+  to   { opacity: 1; transform: perspective(1200px) rotateX(0) translateY(0); }
+}
+
+.mega-tile {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  text-align: left;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 222, 255, 0.1);
+  transition:
+    transform 0.3s var(--ease-spring),
+    background-color 0.3s var(--ease-out-soft),
+    border-color 0.3s var(--ease-out-soft);
+  animation: sosnetRise 0.4s var(--ease-out-soft) backwards;
+  animation-delay: calc(30ms * var(--i, 0));
+}
+
+.mega-tile:hover {
+  transform: translateY(-3px) scale(1.02);
+  background: rgba(68, 136, 255, 0.14);
+  border-color: rgba(150, 192, 255, 0.4);
+}
+
+.mega-tile[data-active="true"] {
+  background: rgba(68, 136, 255, 0.22);
+  border-color: rgba(170, 204, 255, 0.55);
+}
+
+.mega-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, #216eff, #47e2ff);
+  box-shadow: 0 10px 22px -10px rgba(33, 110, 255, 0.9);
+}
+
+.mega-icon svg { width: 20px; height: 20px; }
+
+/* --- Hero: section title, group trail, sub navigation, globe --------- */
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 28px 0 8px;
+}
+
+@media (min-width: 1024px) {
+  .hero { grid-template-columns: minmax(0, 1fr) auto; padding-top: 36px; }
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #c2daff;
+}
+
+.hero-eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #fff, #47e2ff);
+}
+
+.hero-title {
+  font-size: clamp(2rem, 4.4vw, 3.6rem);
+  line-height: 1.02;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  background: linear-gradient(100deg, #ffffff 0%, #d6e6ff 35%, #8fe9ff 60%, #ffffff 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: heroShine 7s var(--ease-in-out-soft) infinite, sosnetRise 0.6s var(--ease-out-soft);
+  text-shadow: none;
+  filter: drop-shadow(0 12px 30px rgba(40, 126, 255, 0.35));
+}
+
+@keyframes heroShine {
+  0%, 100% { background-position: 0% 0; }
+  50%      { background-position: 100% 0; }
+}
+
+.hero-globe {
+  display: none;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .hero-globe { display: block; margin: -40px -10px -50px 0; }
+}
+
+.subnav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+  scrollbar-width: none;
+}
+
+.subnav::-webkit-scrollbar { display: none; }
+
+.subnav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #d9e8ff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(200, 222, 255, 0.16);
+  cursor: pointer;
+  transition: all 0.25s var(--ease-out-soft);
+}
+
+.subnav-pill svg { width: 15px; height: 15px; }
+.subnav-pill:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.subnav-pill[data-active="true"] {
+  color: #041f3a;
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 10px 26px -10px rgba(255, 255, 255, 0.6);
+}
+
+/* --- Phone dock: floating pill at the bottom ------------------------- */
+
+.dock {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  border-radius: 24px;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(10, 48, 92, 0.9), rgba(3, 19, 36, 0.95));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(190, 217, 255, 0.16);
+}
+
+@media (min-width: 1280px) {
+  .dock { display: none; }
+}
+
+.dock-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 2px;
+  border-radius: 18px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b9cff0;
+  cursor: pointer;
+}
+
+.dock-item svg { width: 22px; height: 22px; }
+
+.dock-center {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 58px;
+  height: 58px;
+  margin: -26px 6px 0;
+  border-radius: 20px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #216eff, #47e2ff);
+  box-shadow: 0 16px 30px -10px rgba(33, 110, 255, 0.9), 0 0 0 5px #061a2a, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transform: rotate(45deg);
+}
+
+.dock-center svg { width: 24px; height: 24px; transform: rotate(-45deg); }
+
+.dock-item[data-active="true"] {
+  color: #fff;
+  background: linear-gradient(135deg, #216eff, #47e2ff);
+}
+
+/* ---------------------------------------------------------------------------
+   10. Pointer light and 3D tilt
+   ------------------------------------------------------------------------
+
+   components/scene-pointer.ts writes the pointer position into --mx/--my on
+   the panel under the cursor, and a rotation into --rx/--ry on elements
+   marked `data-tilt`. Only `data-tilt` elements get a transform: a
+   transformed ancestor would trap `position: fixed` modals, so plain panels
+   (which may contain modals) only get the light.
+   ------------------------------------------------------------------------ */
+
+.panel {
+  background-image: radial-gradient(
+    520px circle at var(--mx, -1000px) var(--my, -1000px),
+    rgba(110, 168, 255, 0.16),
+    transparent 42%
+  );
+}
+
+[data-tilt] {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.35s var(--ease-out-soft), box-shadow 0.35s var(--ease-out-soft);
+}
+
+[data-tilt]:hover {
+  box-shadow: 0 40px 80px -36px rgba(40, 119, 255, 0.65);
+}
+
+/* ---------------------------------------------------------------------------
+   11. Data tables
+   ------------------------------------------------------------------------
+
+   Every table inside the app renders as a stack of floating row cards:
+   separated rows, rounded ends, a glowing spine on hover and a staggered
+   entrance. Styles are unlayered, so they win over Tailwind's divide and
+   border utilities without !important.
+   ------------------------------------------------------------------------ */
+
+main table {
+  border-collapse: separate;
+  border-spacing: 0 7px;
+  margin-top: -7px;
+}
+
+main thead tr { border: 0; background: transparent; }
+
+main thead th {
+  padding-top: 14px;
+  padding-bottom: 6px;
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a9c2e7;
+  white-space: nowrap;
+}
+
+main tbody > tr { border: 0; }
+
+main tbody > tr > td {
+  border: 0;
+  background: rgba(235, 243, 255, 0.045);
+  transition: background-color 0.25s var(--ease-out-soft);
+}
+
+main tbody > tr > td:first-child {
+  position: relative;
+  border-radius: 16px 0 0 16px;
+}
+
+main tbody > tr > td:last-child { border-radius: 0 16px 16px 0; }
+main tbody > tr > td:only-child { border-radius: 16px; }
+
+/* Spine: a gradient bar that grows on hover. */
+main tbody > tr > td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #fff, #47e2ff);
+  transform: scaleY(0);
+  transition: transform 0.3s var(--ease-spring);
+}
+
+main tbody > tr:hover > td { background: rgba(90, 152, 255, 0.14); }
+main tbody > tr:hover > td:first-child::before { transform: scaleY(1); }
+
+main tbody > tr { animation: rowIn 0.5s var(--ease-out-soft) backwards; }
+main tbody > tr:nth-child(2)  { animation-delay: 30ms; }
+main tbody > tr:nth-child(3)  { animation-delay: 60ms; }
+main tbody > tr:nth-child(4)  { animation-delay: 90ms; }
+main tbody > tr:nth-child(5)  { animation-delay: 120ms; }
+main tbody > tr:nth-child(6)  { animation-delay: 150ms; }
+main tbody > tr:nth-child(7)  { animation-delay: 180ms; }
+main tbody > tr:nth-child(8)  { animation-delay: 210ms; }
+main tbody > tr:nth-child(9)  { animation-delay: 240ms; }
+main tbody > tr:nth-child(n+10) { animation-delay: 270ms; }
+
+@keyframes rowIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   12. Data cell primitives (components/ui/data-cells.tsx)
+   ------------------------------------------------------------------------ */
+
+.orb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, hsl(var(--orb-h, 350) 90% 58%), hsl(calc(var(--orb-h, 350) + 35) 90% 48%));
+  box-shadow: 0 10px 20px -10px hsl(var(--orb-h, 350) 90% 40%), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: rotate(-6deg);
+  transition: transform 0.3s var(--ease-spring);
+}
+
+tr:hover .orb { transform: rotate(0deg) scale(1.08); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--chip, #d9e8ff);
+  background: color-mix(in srgb, var(--chip, #d9e8ff) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip, #d9e8ff) 34%, transparent);
+}
+
+.chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chip, #d9e8ff);
+  box-shadow: 0 0 10px var(--chip, #d9e8ff);
+}
+
+.chip[data-live="true"]::before { animation: chipBeat 1.8s var(--ease-out-soft) infinite; }
+
+@keyframes chipBeat {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.7); }
+}
+
+.chip-ok     { --chip: #4ade80; }
+.chip-warn   { --chip: #fbbf24; }
+.chip-bad    { --chip: #8ab8ff; }
+.chip-info   { --chip: #7dd3fc; }
+.chip-muted  { --chip: #aabfdc; }
+.chip-accent { --chip: #85eeff; }
+
+.tag-id {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #c9deff;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(200, 222, 255, 0.14);
+}
+
+.meter {
+  position: relative;
+  height: 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.meter > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #216eff, #47e2ff, #d1f5ff);
+  animation: meterGrow 0.9s var(--ease-out-soft) backwards;
+  transform-origin: left;
+}
+
+@keyframes meterGrow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Row actions: dimmed until the row is hovered or focused. */
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  opacity: 0.55;
+  transition: opacity 0.25s var(--ease-out-soft);
+}
+
+tr:hover .row-actions,
+.row-actions:focus-within { opacity: 1; }
+
+.act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #e3eeff;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(200, 222, 255, 0.18);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out-soft);
+}
+
+.act:hover { color: #fff; background: rgba(68, 136, 255, 0.3); border-color: rgba(170, 204, 255, 0.5); }
+.act:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.act-primary {
+  color: #fff;
+  background: linear-gradient(100deg, #216eff, #47e2ff);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Big KPI numbers. */
+.kpi-value {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 8px 26px rgba(40, 126, 255, 0.45);
+}
+
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #b3ccf0;
+}
+
+/* ---------------------------------------------------------------------------
+   13. Modals are never trapped
+   ------------------------------------------------------------------------
+
+   Modals are `position: fixed` overlays rendered inside the component that
+   opens them. Any ancestor with a transform, filter, backdrop-filter or a
+   running animation becomes their containing block: the modal is then sized
+   to that ancestor, or moves with it (the tilt follows the pointer, so the
+   modal flickered). While a fixed overlay is open inside an element, that
+   element keeps still.
+   ------------------------------------------------------------------------ */
+
+:where(main, header, section, div, article, li, tr, td, button, form):has(.fixed) {
+  transform: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  perspective: none !important;
+  animation: none !important;
+  will-change: auto !important;
+  contain: none !important;
+}
+
+/* Kept apart from the rule above: in one block the minifier folds these
+   into `transform: translate(0) rotate(0) scale(1)`, which is not `none` and
+   traps the modal all over again. */
+:is(main, header, section, div, article, li, tr, td, button, form):has(.fixed) {
+  translate: none !important;
+  rotate: none !important;
+  scale: none !important;
+}
+
+:is(main, header, section, div, article, li, tr, td, button, form):not(.fixed):has(.fixed) {
+  backdrop-filter: none !important;
+}
+
+/* Dialog boxes are solid, so text never sits on the moving scene. */
+.fixed .panel,
+.fixed [class*="bg-surface-950"] {
+  background-color: #071b2a !important;
+}
+
+/* Chips laid over a product photo (inside an absolutely positioned corner). */
+.absolute > .chip {
+  background-color: rgba(2, 12, 20, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ---------------------------------------------------------------------------
+   14. Light cards ("modalità chiara")
+   ------------------------------------------------------------------------
+
+   The red scene, the command deck and the hero never change. With
+   `data-surface="light"` on <html> (lib/theme.tsx), content containers
+   (panels, the card popup, dialog boxes) turn white with dark text.
+   A separate attribute from `data-theme`, which stays "dark": the old
+   `light:` utilities left in some components must not wake up.
+   ------------------------------------------------------------------------ */
+
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) {
+  --bg-elevated: #e2e9ef;
+  --fg-base: #091624;
+  --fg-muted: #4a5b6b;
+  --fg-subtle: #6a7b8a;
+  --line-soft: rgba(10, 44, 80, 0.1);
+  --line-strong: rgba(10, 44, 80, 0.2);
+  --field-bg: #f0f4f8;
+  --field-border: rgba(10, 44, 80, 0.2);
+  --field-fg: #091624;
+  --org-line: rgba(10, 44, 80, 0.25);
+  color: #091624;
+  background-color: #e2e9ef !important;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 24px 60px -34px rgba(0, 9, 20, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+:root[data-surface="light"] .panel {
+  background-image: radial-gradient(520px circle at var(--mx, -1000px) var(--my, -1000px), rgba(60, 141, 255, 0.08), transparent 42%);
+}
+
+/* Text */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-white, .text-surface-50, .text-surface-100) { color: #091624; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-surface-200, .text-surface-300) { color: #2a3d4d; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-surface-400, .text-surface-500) { color: #556b7a; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-brand-200, .text-brand-300, .text-brand-400) { color: #0a4dc2; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-danger-300, .text-danger-400) { color: #126dbe; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-success-300, .text-success-400) { color: #15803d; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-warn-300, .text-warn-400) { color: #b45309; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.text-info-300, .text-info-400) { color: #0369a1; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .kpi-label { color: #0745b8; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .kpi-value { color: #050f1a; text-shadow: none; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(h1, h2, h3, h4, strong, dt, dd) { color: inherit; }
+
+/* Translucent white fills and lines become faint dark ones */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is([class~="bg-white/5"], [class~="bg-white/6"], [class~="bg-white/[0.04]"]) { background-color: rgba(10, 44, 80, 0.045); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is([class~="bg-white/10"], [class~="bg-white/15"]) { background-color: rgba(10, 44, 80, 0.08); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is([class~="bg-black/25"], [class~="bg-black/20"]) { background-color: rgba(10, 44, 80, 0.06); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is([class*="border-white/"], [class*="ring-white/"]) { border-color: rgba(10, 44, 80, 0.12); --tw-ring-color: rgba(10, 44, 80, 0.12); }
+
+/* Tables */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) thead th { color: #5e799a; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) tbody > tr > td { background: #d4dde5; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) tbody > tr:hover > td { background: #cfe0f2; }
+
+/* Chips: darker inks that read on white */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-ok { --chip: #15803d; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-warn { --chip: #b45309; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-bad { --chip: #126dbe; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-info { --chip: #0369a1; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-muted { --chip: #556b7a; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .chip-accent { --chip: #1892be; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .absolute > .chip { background-color: rgba(234, 240, 245, 0.92); }
+
+/* Controls */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .act:not(.act-primary) {
+  color: #2a3d4d;
+  background: rgba(10, 44, 80, 0.05);
+  border-color: rgba(10, 44, 80, 0.16);
+}
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .act:not(.act-primary):hover { background: rgba(10, 84, 224, 0.1); color: #0745b8; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .subnav-pill { color: #2a3d4d; background: rgba(10, 44, 80, 0.05); border-color: rgba(10, 44, 80, 0.14); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .subnav-pill[data-active="true"] { color: #fff; background: #091624; border-color: #091624; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .tag-id { color: #103c7a; background: #eef2f7; border-color: rgba(16, 60, 122, 0.18); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .meter { background: rgba(10, 44, 80, 0.1); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .field::placeholder { color: #8699a5; }
+
+/* Charts and the network tree inside panels */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .recharts-cartesian-axis-tick text { fill: #556b7a !important; }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .recharts-cartesian-grid line { stroke: rgba(10, 44, 80, 0.08); }
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) .org-card { background: #eef2f7; }
+
+/* Dialog boxes follow the cards */
+:root[data-surface="light"] .fixed .panel,
+:root[data-surface="light"] .fixed [class*="bg-surface-950"] {
+  background-color: #e2e9ef !important;
+}
+
+/* The card popup's frame is a soft grey so its white cards stand out. */
+:root[data-surface="light"] .sheet.sheet.sheet { background-color: #c7d2dc !important; }
+:root[data-surface="light"] .sheet [aria-label="Chiudi la scheda"] { background: #091624; color: #fff; }
+
+/* Tinted wells inside a white card (the tree's viewport, sunken boxes). */
+:root[data-surface="light"] :is(.panel, .sheet) [class*="bg-surface-9"] { background-color: #d6dfe6; }
+
+/* Chart axis labels: recharts puts the fill on the text and its tspan. */
+:root[data-surface="light"] :is(.panel, .sheet) :is(.recharts-cartesian-axis-tick-value, .recharts-cartesian-axis-tick-value tspan, .recharts-text, .recharts-text tspan) {
+  fill: #556b7a !important;
+}
+
+/* Options of dropdowns inside light cards. */
+:root[data-surface="light"] :is(.panel, .sheet, .fixed [class*="bg-surface-95"]) :is(.field option, select option) {
+  background: #f0f4f8;
+  color: #091624;
+}
+
+/* ---------------------------------------------------------------------------
+   SOS Affiliate: the rainbow underline of the logo (cyan, blue, violet,
+   pink, amber), used as the brand's signature line.
+   ------------------------------------------------------------------------ */
+.sos-rainbow {
+  background: linear-gradient(90deg, #29c5f6 0%, #0e8cf0 25%, #a855f7 50%, #ec4899 75%, #fcd34d 100%);
+}
+
+/* --- Rete virtuale (components/affiliate/network-galaxy.tsx) ------------- */
+.galaxy-labels .galaxy-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+  color: #e6ecff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.25s;
+  will-change: transform;
+}
+.galaxy-labels .galaxy-label b { font-weight: 700; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.galaxy-labels .galaxy-label span { font-size: 9.5px; color: #9fb0d6; }
+.galaxy-labels .galaxy-label[data-kind="focus"],
+.galaxy-labels .galaxy-label[data-kind="selected"] {
+  background: rgba(10, 84, 224, 0.35);
+  border: 1px solid rgba(150, 184, 255, 0.45);
+  font-size: 13px;
+  backdrop-filter: blur(6px);
+}
+.galaxy-labels .galaxy-label[data-kind="hover"] { background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.2); }
+.galaxy-caption { animation: galaxy-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.galaxy-hint { animation: galaxy-rise 0.8s 2.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes galaxy-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.galaxy-warp { position: relative; width: 96px; height: 96px; }
+.galaxy-warp span {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(85, 145, 255, 0.7);
+  box-shadow: 0 0 24px rgba(30, 108, 248, 0.6);
+  animation: galaxy-warp 1.35s ease-out infinite;
+}
+@keyframes galaxy-warp { from { transform: scale(0.2); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-caption, .galaxy-hint, .galaxy-warp span { animation: none; }
+}

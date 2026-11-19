@@ -1,0 +1,224 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, field_validator
+
+from app.modules.contracts.schemas import ContractRead, _validate_email, _validate_iban
+
+
+class ContractRequestAddress(BaseModel):
+    street: str
+    city: str
+    province: str
+    postal_code: str
+
+    @field_validator("street", "city", "province", mode="before")
+    @classmethod
+    def required_text(cls, v: str | None) -> str:
+        cleaned = " ".join((v or "").split())
+        if not cleaned:
+            raise ValueError("campo obbligatorio")
+        return cleaned
+
+    @field_validator("postal_code", mode="before")
+    @classmethod
+    def validate_postal_code(cls, v: str | None) -> str:
+        cleaned = (v or "").strip()
+        if len(cleaned) != 5 or not cleaned.isdigit():
+            raise ValueError("CAP non valido: sono 5 cifre")
+        return cleaned
+
+
+class ContractRequestHolder(ContractRequestAddress):
+    """Holder and supply address, asked once when a request starts. PEC and
+    IBAN are optional; the IBAN can be added later."""
+
+    holder_first_name: str
+    holder_last_name: str
+    email: str
+    pec: str | None = None
+    iban: str | None = None
+
+    @field_validator("holder_first_name", "holder_last_name", mode="before")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str:
+        cleaned = " ".join((v or "").split())
+        if not cleaned:
+            raise ValueError("campo obbligatorio")
+        return cleaned
+
+    @field_validator("pec", "iban", mode="before")
+    @classmethod
+    def blank_to_none(cls, v: str | None) -> str | None:
+        return (v or "").strip() or None
+
+    @field_validator("pec")
+    @classmethod
+    def validate_pec(cls, v: str | None) -> str | None:
+        return _validate_email(v)
+
+    @field_validator("iban")
+    @classmethod
+    def validate_iban(cls, v: str | None) -> str | None:
+        return _validate_iban(v)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        validated = _validate_email(v)
+        if validated is None:
+            raise ValueError("email obbligatoria")
+        return validated
+
+
+class ContractRequestCreate(ContractRequestHolder):
+    #: Set by a promoter acting for a customer; omitted in self-service.
+    customer_id: uuid.UUID | None = None
+    #: Number of supply points to create.
+    points_count: int = 1
+    #: Catalog product the customer started from, preselected for every point.
+    product_version_id: uuid.UUID | None = None
+    #: Staff only: attributed promoter; defaults to the customer's referrer.
+    producer_agent_id: uuid.UUID | None = None
+
+
+class ContractRequestPointsCount(BaseModel):
+    count: int
+
+
+class ContractRequestProductSet(BaseModel):
+    product_version_id: uuid.UUID
+
+
+class ContractRequestSummaryRead(BaseModel):
+    id: uuid.UUID
+    code: str
+    customer_id: uuid.UUID
+    customer_name: str | None = None
+    customer_kind: str | None = None
+    #: DRAFT / SUBMITTED / CANCELLED
+    status: str
+    created_at: datetime
+    submitted_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_by_role: str | None = None
+    activated_by_promoter_id: uuid.UUID | None = None
+    activated_by_promoter_name: str | None = None
+    holder_name: str | None = None
+    points_total: int = 0
+    points_by_status: dict[str, int] = {}
+    points_active: int = 0
+    points_to_review: int = 0
+    points_documents_pending: int = 0
+    points_without_package: int = 0
+    points_paid: int = 0
+    points_payable: int = 0
+    #: Frozen gross prices of points not rejected or cancelled.
+    total_gross_cents: int = 0
+    payment_plans: list[str] = []
+    instalments_failed: int = 0
+    #: Bank transfer announced by the customer, not yet confirmed.
+    bank_transfer_pending: bool = False
+    bank_transfer_total_cents: int | None = None
+    bank_transfer_requested_at: datetime | None = None
+    payment_proof_uploaded_at: datetime | None = None
+    #: Amount actually paid for paid points (after discounts).
+    total_paid_cents: int = 0
+
+
+class ContractRequestPointRead(ContractRead):
+    #: 1-based position of the point within the request.
+    position: int = 0
+    meter_number: str | None = None
+    street: str | None = None
+    city: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    product_id: uuid.UUID | None = None
+    documents_missing: int = 0
+    documents_rejected: int = 0
+    instalments_total: int | None = None
+    instalments_paid: int = 0
+    instalments_failed: int = 0
+    billing_active: bool = False
+
+
+class ContractRequestCheckoutRead(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    payment_plan: str
+    total_cents: int
+    instalment_cents: int
+    contracts: int
+    completed_at: datetime | None = None
+    stripe_checkout_session_id: str
+    stripe_subscription_id: str | None = None
+    outcome: str | None = None
+
+
+class ContractRequestDetailRead(ContractRequestSummaryRead):
+    street: str | None = None
+    city: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    holder_first_name: str | None = None
+    holder_last_name: str | None = None
+    email: str | None = None
+    pec: str | None = None
+    iban: str | None = None
+    points: list[ContractRequestPointRead] = []
+    #: Staff only; empty for customers and promoters.
+    checkouts: list[ContractRequestCheckoutRead] = []
+
+
+class ContractRequestPaymentLineRead(BaseModel):
+    contract_id: uuid.UUID
+    label: str
+    gross_cents: int
+
+
+class ContractRequestPaymentOptionRead(BaseModel):
+    key: str
+    label: str
+    description: str
+    instalments: int
+    #: Charge per month (or the single charge) across all points.
+    instalment_cents: int
+    total_cents: int
+    rounding_difference_cents: int
+    available: bool
+    unavailable_reason: str | None = None
+    #: Undiscounted price, discount, and the SosnetCash earned (computed on
+    #: the amount actually paid).
+    list_total_cents: int = 0
+    discount_percentage: int = 0
+    discount_cents: int = 0
+    cashback_cents: int = 0
+
+
+class ContractRequestPaymentOptionsRead(BaseModel):
+    contract_request_id: uuid.UUID
+    card_available: bool
+    #: Contracts covered: submitted, priced and unpaid.
+    lines: list[ContractRequestPaymentLineRead]
+    total_gross_cents: int
+    options: list[ContractRequestPaymentOptionRead]
+    points_paid: int
+    #: SosnetCash earned across these contracts.
+    cashback_total_cents: int
+    #: PER_INSTALMENT / UPFRONT: cashback per instalment or all at the first.
+    cashback_mode: str = "PER_INSTALMENT"
+    #: Bank transfer: single payment with the same discount.
+    bank_transfer_available: bool = False
+    bank_transfer_pending: bool = False
+    bank_transfer_total_cents: int | None = None
+    bank_transfer_requested_at: datetime | None = None
+    payment_proof_uploaded_at: datetime | None = None
+    bank_iban: str | None = None
+    bank_account_holder: str | None = None
+    bank_transfer_instructions: str | None = None
+    bank_transfer_reference: str | None = None
+
+
+class ContractRequestCheckoutRequest(BaseModel):
+    payment_plan: str

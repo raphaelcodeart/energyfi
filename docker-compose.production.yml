@@ -1,0 +1,128 @@
+name: sosnet-production
+
+# Production topology: no MinIO (use real S3-compatible storage via S3_* env vars),
+# no seed data, images built once and referenced by tag (adjust ${IMAGE_TAG} in your
+# CI/CD pipeline). TLS: nginx bind-mounts ./certbot/conf and ./certbot/www from the
+# host, exactly like docker-compose.dev.yml -- certbot itself runs on the HOST (not
+# in a container), via scripts/renew-cert.sh on a cron job. See
+# docs/server-migration-guide.md §4.6 for the verified, step-by-step procedure
+# (this is not a placeholder -- it's the same setup already running in dev).
+# Postgres/Redis are never published to the host, matching docs/network-model.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ${REGISTRY:-sosnet}/api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips='*'"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  celery-worker:
+    image: ${REGISTRY:-sosnet}/api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
+    # Overrides the api image's baked-in HTTP healthcheck (meaningless here --
+    # the worker serves no HTTP); `celery inspect ping` is the real check.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celery-mamify:
+    # Reads of Mamify (read only): network copy, new members, order poller.
+    # One at a time, so the key's 60 calls a minute are shared in order.
+    image: ${REGISTRY:-sosnet}/api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "mamify", "--concurrency=1", "-n", "mamify@%h"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.celery_app inspect ping -d mamify@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celery-beat:
+    image: ${REGISTRY:-sosnet}/api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    healthcheck:
+      disable: true
+
+  dashboard:
+    image: ${REGISTRY:-sosnet}/dashboard:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      # See docker-compose.dev.yml's comment: without this, Next's standalone
+      # server binds to the container's interface IP instead of the wildcard.
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Bind mounts (not named volumes) so the host's certbot -- run via
+      # scripts/renew-cert.sh, not a container -- can read/write them directly.
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    ports:
+      # HTTP_PORT/HTTPS_PORT in .env: 80/443 on a dedicated server.
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    depends_on:
+      - api
+      - dashboard
+
+volumes:
+  postgres_data:

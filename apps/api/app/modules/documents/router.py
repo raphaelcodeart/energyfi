@@ -1,0 +1,241 @@
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.foundation.db import get_db
+from app.foundation.deps import CurrentUser, require_permission
+from app.foundation.rate_limit import rate_limit
+from app.foundation.storage import UploadValidationError
+from app.modules.contracts.models import Contract, ContractAttribution, ContractRequest
+from app.modules.customers.models import Company, Customer, CustomerProfile
+from app.modules.customers.service import display_name_for
+from app.modules.documents import service as documents_service
+from app.modules.documents.models import Document
+from app.modules.documents.schemas import (
+    ContractDocumentsRead,
+    DocumentRead,
+    DocumentReviewRequest,
+    DocumentUrlRead,
+    RequiredDocumentStatus,
+)
+from app.modules.support.service import actor_role_for
+from app.modules.users.models import User
+
+router = APIRouter(tags=["documents"])
+
+PRESIGNED_URL_TTL_SECONDS = 300
+
+
+async def _resolve_own_customer_id(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+    stmt = select(Customer.id).where(Customer.organization_id == organization_id, Customer.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _get_org_scoped_contract(db: AsyncSession, *, organization_id: uuid.UUID, contract_id: uuid.UUID) -> Contract:
+    contract = await db.get(Contract, contract_id)
+    if contract is None or contract.organization_id != organization_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Contract not found")
+    return contract
+
+
+async def _resolve_own_agent_id(db: AsyncSession, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+    from app.modules.network.models import AgentProfile
+
+    stmt = select(AgentProfile.id).where(AgentProfile.organization_id == organization_id, AgentProfile.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _assert_contract_document_access(
+    db: AsyncSession, *, current_user: CurrentUser, contract: Contract, actor_role: str
+) -> str:
+    """Who may access a contract's documents, and the role an upload is
+    recorded under:
+
+    - the contract's customer (CUSTOMER);
+    - a promoter who produced the contract or filled in its pratica (PROMOTER);
+    - staff, i.e. anyone else with access (ADMIN).
+
+    Both relationships are checked regardless of the token's first role, since
+    a promoter who joined via "Lavora con noi" also keeps the CUSTOMER role."""
+    if "CUSTOMER" not in current_user.roles and "PROMOTER" not in current_user.roles:
+        return actor_role
+    own_customer_id = await _resolve_own_customer_id(
+        db, organization_id=current_user.organization_id, user_id=current_user.user_id
+    )
+    if own_customer_id is not None and contract.customer_id == own_customer_id:
+        return "CUSTOMER"
+    own_agent_id = await _resolve_own_agent_id(
+        db, organization_id=current_user.organization_id, user_id=current_user.user_id
+    )
+    if own_agent_id is not None:
+        attribution = (
+            await db.get(ContractAttribution, contract.contract_attribution_id)
+            if contract.contract_attribution_id is not None else None
+        )
+        request = await db.get(ContractRequest, contract.contract_request_id)
+        if (attribution is not None and attribution.producer_agent_id == own_agent_id) or (
+            request is not None and request.activated_by_promoter_id == own_agent_id
+        ):
+            return "PROMOTER"
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized for this contract's documents")
+
+
+async def _document_read(db: AsyncSession, document: Document) -> dict:
+    name = None
+    user = await db.get(User, document.uploaded_by_user_id)
+    if document.uploaded_by_role == "CUSTOMER":
+        customer = (
+            await db.execute(select(Customer).where(Customer.user_id == document.uploaded_by_user_id))
+        ).scalar_one_or_none()
+        if customer is not None:
+            profile = await db.get(CustomerProfile, customer.id)
+            company = await db.get(Company, customer.id)
+            name = display_name_for(customer.kind, profile, company)
+    if name is None and user is not None:
+        name = user.email
+
+    reviewed_by_name = None
+    if document.reviewed_by_user_id is not None:
+        reviewer = await db.get(User, document.reviewed_by_user_id)
+        reviewed_by_name = reviewer.email if reviewer else None
+
+    return {
+        "id": document.id,
+        "contract_id": document.contract_id,
+        "contract_request_id": document.contract_request_id,
+        "document_type": document.document_type,
+        "description": document.description,
+        "original_filename": document.original_filename,
+        "content_type": document.content_type,
+        "size_bytes": document.size_bytes,
+        "uploaded_by_user_id": document.uploaded_by_user_id,
+        "uploaded_by_role": document.uploaded_by_role,
+        "uploaded_by_name": name,
+        "status": document.status,
+        "reviewed_by_user_id": document.reviewed_by_user_id,
+        "reviewed_by_name": reviewed_by_name,
+        "reviewed_at": document.reviewed_at,
+        "review_note": document.review_note,
+        "created_at": document.created_at,
+    }
+
+
+@router.post(
+    "/contracts/{contract_id}/documents",
+    response_model=DocumentRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("document-upload", max_requests=20, window_seconds=300))],
+)
+async def upload_contract_document(
+    contract_id: uuid.UUID,
+    document_type: str = Form(...),
+    #: Required when document_type is OTHER, ignored otherwise; enforced by
+    #: the service.
+    description: str | None = Form(None),
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(require_permission("documents.upload")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentRead:
+    contract = await _get_org_scoped_contract(db, organization_id=current_user.organization_id, contract_id=contract_id)
+    actor_role = await _assert_contract_document_access(
+        db, current_user=current_user, contract=contract, actor_role=actor_role_for(current_user.roles)
+    )
+
+    file_bytes = await file.read()
+    try:
+        document = await documents_service.upload_document(
+            db,
+            organization_id=current_user.organization_id,
+            contract_id=contract_id,
+            document_type=document_type,
+            description=description,
+            file_bytes=file_bytes,
+            content_type=file.content_type or "",
+            original_filename=file.filename or "documento",
+            actor_user_id=current_user.user_id,
+            actor_role=actor_role,
+        )
+    except (documents_service.DocumentValidationError, UploadValidationError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return DocumentRead(**(await _document_read(db, document)))
+
+
+@router.get("/contracts/{contract_id}/documents", response_model=ContractDocumentsRead)
+async def get_contract_documents(
+    contract_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission("documents.download")),
+    db: AsyncSession = Depends(get_db),
+) -> ContractDocumentsRead:
+    contract = await _get_org_scoped_contract(db, organization_id=current_user.organization_id, contract_id=contract_id)
+    actor_role = actor_role_for(current_user.roles)
+    await _assert_contract_document_access(db, current_user=current_user, contract=contract, actor_role=actor_role)
+
+    customer = await db.get(Customer, contract.customer_id)
+    customer_kind = customer.kind if customer else "PRIVATE"
+
+    rows = await documents_service.get_contract_documents_status(
+        db, organization_id=current_user.organization_id, contract=contract, customer_kind=customer_kind
+    )
+    required = []
+    for row in rows:
+        doc_read = DocumentRead(**(await _document_read(db, row["document"]))) if row["document"] is not None else None
+        required.append(
+            RequiredDocumentStatus(
+                document_type=row["document_type"], required=row["required"], document=doc_read
+            )
+        )
+
+    extra_docs = await documents_service.get_extra_documents_for_contract(
+        db, organization_id=current_user.organization_id, contract=contract, customer_kind=customer_kind
+    )
+    extra = [DocumentRead(**(await _document_read(db, doc))) for doc in extra_docs]
+    return ContractDocumentsRead(contract_id=contract_id, required=required, extra=extra)
+
+
+@router.get("/documents/{document_id}/url", response_model=DocumentUrlRead)
+async def get_document_url(
+    document_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_permission("documents.download")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentUrlRead:
+    document = await documents_service.get_document(db, organization_id=current_user.organization_id, document_id=document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+
+    if document.contract_id is None:
+        # A pratica document: anyone who may open the pratica may open it.
+        from app.modules.contracts.requests_router import _load as load_request
+
+        await load_request(db, current_user, document.contract_request_id)
+    else:
+        contract = await _get_org_scoped_contract(
+            db, organization_id=current_user.organization_id, contract_id=document.contract_id
+        )
+        actor_role = actor_role_for(current_user.roles)
+        await _assert_contract_document_access(db, current_user=current_user, contract=contract, actor_role=actor_role)
+
+    url = await documents_service.get_presigned_url_for_document(document)
+    return DocumentUrlRead(url=url, expires_in_seconds=PRESIGNED_URL_TTL_SECONDS)
+
+
+@router.patch("/documents/{document_id}/review", response_model=DocumentRead)
+async def review_document(
+    document_id: uuid.UUID,
+    payload: DocumentReviewRequest,
+    current_user: CurrentUser = Depends(require_permission("documents.review")),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentRead:
+    document = await documents_service.review_document(
+        db,
+        organization_id=current_user.organization_id,
+        document_id=document_id,
+        new_status=payload.status,
+        review_note=payload.review_note,
+        actor_user_id=current_user.user_id,
+    )
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return DocumentRead(**(await _document_read(db, document)))
